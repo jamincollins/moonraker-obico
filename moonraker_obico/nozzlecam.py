@@ -14,6 +14,7 @@ class NozzleCam:
         self.moonrakerconn = moonrakerconn
         self.layer_change_macro_embedded_in_gcode = False
         self.last_on_first_layer = 0 # track the time the print was last on the first layer to give some buffer for macro to initiate first layer scanning
+        self.first_layer_done_notified_print_ts = None
 
     def start(self):
         nozzlecam_config = self.get_nozzlecam_config()
@@ -22,6 +23,7 @@ class NozzleCam:
             return
 
         capturing = False
+        capturing_print_ts = None
         capturing_interval = 1 # 1s
         first_layer_scanning = False
         while True:
@@ -29,14 +31,20 @@ class NozzleCam:
 
             if not self.should_capture():
                 if capturing:
-                    self.notify_server_nozzlecam_complete()
+                    if capturing_print_ts in (None, -1):
+                        capturing_print_ts = self.model.printer_state.current_print_ts
+                    self.notify_server_nozzlecam_complete_once(capturing_print_ts)
 
                 capturing = False
+                capturing_print_ts = None
                 capturing_interval = 1
                 first_layer_scanning = False
                 continue
 
             capturing = True
+            current_print_ts = self.model.printer_state.current_print_ts
+            if current_print_ts not in (None, -1):
+                capturing_print_ts = current_print_ts
 
             if not self.model.printer_state.is_printing(): # Probably the print was paused, or some other reasons
                 continue
@@ -89,6 +97,15 @@ class NozzleCam:
             _logger.debug('server notified 1st layer is done')
         except Exception:
             _logger.warning('Failed to send images', exc_info=True)
+
+    def notify_server_nozzlecam_complete_once(self, current_print_ts):
+        if current_print_ts in (None, -1):
+            return
+        if self.first_layer_done_notified_print_ts == current_print_ts:
+            return
+
+        self.first_layer_done_notified_print_ts = current_print_ts
+        self.notify_server_nozzlecam_complete()
 
     def get_nozzlecam_config(self):
         class StubNozzleCamConfig:
