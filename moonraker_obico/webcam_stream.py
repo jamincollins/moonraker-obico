@@ -185,7 +185,7 @@ class WebcamStreamer:
         )
 
     def report_streaming_failure(self):
-        self.sentry.captureException()
+        _logger.exception('Webcam streaming failed')
         self.send_streaming_failed_event()
 
     def find_streaming_params(self):
